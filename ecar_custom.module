@@ -1,0 +1,540 @@
+<?php
+/**
+ * Implements hook_help().
+ *
+ * Displays help and module information.
+ *
+ * @param path 
+ *   Which path of the site we're using to display help
+ * @param arg 
+ *   Array that holds the current path as returned from arg() function
+ */
+function ecar_custom_help($path, $arg) {
+  switch ($path) {
+    case "admin/help#ecar_custom":
+      return '' . t("Provides most of the customizations for E-car.") . '';
+      break;
+  }
+} 
+
+/**
+ * Implements hook_services_request_postprocess_alter().
+ * https://github.com/signalpoint/DrupalGap/issues/641
+ */
+function ecar_custom_services_request_postprocess_alter($controller, $args, &$result) {
+  if ($controller['callback'] == '_system_resource_connect') {
+    global $user;
+    if ($user->uid) {
+      $account = user_load($user->uid);
+      unset($account->pass);
+      $result->user = $account;
+    }
+  }
+}
+
+function ecar_custom_comment_insert($comment){
+	dpm($comment->uid, "Commenter");
+	//Goal id
+	$goal = goals_load(2);
+	dpm($goal, "Goal 2");
+	$goals = goals_load_multiple();
+	dpm($goals, "All goals defined");
+
+	$tasks = goals_tasks_load_multiple();
+	dpm($tasks, "All tasks defined");
+
+	//Award users with taksk
+	/**
+	 * Records a task a completed for a user.
+	 *
+	 * @param object $task
+	 *   Task object to check.
+	 * @param int $uid
+	 *   User ID to check.
+	 */
+	//goals_award_task($task, $uid)
+
+/*
+  $tasks = entity_load('goal_task', array($task_id));
+  $task = $tasks[$task_id];
+  $message = t('You have completed the task @task.', array('@task' => $task->title));
+  drupal_set_message($message);
+*/
+
+}
+
+/*
+function ecar_custom_achievements_info(){
+	$achievements = array(
+		'vertified-user' => array(
+			'title' 		=> t('Velkommen til eCharge!'),
+			'description' 	=> t('Din første badge som takk for at du registrerte deg på eCharge!'),
+			'storage'		=> 'user-profile',
+			'points' 		=> 10,
+			'images' => array(
+				//'unlocked' 	=> 'sites/default/files/example1.png',
+				),
+			),
+
+		'first-comment' => array(
+			'title' 		=> t('Din første kommentar'),
+			'description' 	=> t('Fordi du bryr deg'),
+			'storage'		=> 'comment-counter',
+			'points' 		=> 10,
+			'images' => array(
+				//'unlocked' 	=> 'sites/default/files/example1.png',
+				),
+			),
+		'10th-comment' => array(
+			'title' 		=> t('Kommentatoren'),
+			'description' 	=> t('Fordi du virkelig bryr deg!'),
+			'storage'		=> 'comment-counter',
+			'points' 		=> 10,
+			'images' => array(
+				//'unlocked' 	=> 'sites/default/files/example1.png',
+				),
+			),
+		'user_image' => array(
+			'title' 		=> t('Et ekte menneske'),
+			'description' 	=> t('Speil speil på veggen der, hvem er vakrest i landet her?'),
+			'storage'		=> 'user-profile',
+			'points' 		=> 20,
+			'images' => array(
+				//'unlocked' 	=> 'sites/default/files/example1.png',
+				),
+			),
+		);
+	return $achievements;
+}
+
+function ecar_custom_comment_insert($comment){
+	 $current_count = achievements_storage_get('comment-counter', $comment->uid) + 1;
+  achievements_storage_set('comment-counter', $current_count, $comment->uid);
+  if($current_count==1){
+  	achievements_unlocked('first-comment', $comment->uid);
+  }
+    if($current_count==10){
+  	achievements_unlocked('10th-comment', $comment->uid);
+  }
+}
+
+
+// Look for changes in user updates and give appropriate achievements.
+// Can also make a counter for completion of profile
+function ecar_custom_user_update(&$edit, $account, $category) {
+	//Look at that face! -> Adding your first image.
+	//This is for the built in picture uploader. 
+	dpm($account);
+	if(($account->picture_upload!=NULL) && ($account->original->picture == NULL)){
+		dpm("Unlock");
+		achievements_unlocked('user_image', $account->uid);
+	}
+	//For other fields
+	if ($account->field_['und'][0]['value'] !=  $account->original->field_['und'][0]['value']) {
+	    dpm('change');
+
+	  }else{
+	    dpm('no change');
+	  }
+}
+*/
+
+/// Functions that parse charging stations.
+
+function ecar_custom_feeds_after_parse(FeedsSource $source, FeedsParserResult $result){
+	dpm("Hook: Ecar custom feeds after parse()");
+	dpm($result, "$ Result after parse");
+
+	 $size = sizeof($result->items);
+	 dpm($size, "Size of result items. (Number of charging stations)");
+	 for($i=0; $i<$size; $i++){
+	 	$cid = $result->items[$i]['charging_station_id'];
+	 	dpm($cid, "charging station id before transfer");
+	 	//Fix charging station ID
+	 	if(strlen($cid)<5){
+	 		$missing_digits = 5 - strlen($cid);
+	 		dpm($missing_digits, "Need to add digits");
+	 		for($missing_digits; $missing_digits>0; $missing_digits--){
+	 			$cid = "0" . $cid;
+	 			dpm($cid, "for result");
+	 		}
+	 		dpm($cid, "Result");
+	 	}
+	 	$result->items[$i]['charging_station_id'] = $cid;
+
+		dpm($cid, "New charging station id");
+	 	//Translate fields
+	 	//$result->items[$i]['field_availability'] ???
+	 	
+
+	 	/*
+		Endrer fra engelsk til norsk 
+	 	*/
+
+	 	for($j=0; $j < $result->items[$i]['number_charging_points']; $j++) {
+	 		if($result->items[$i]['charging_point_vehicle_type'][$j] == "All vehicles") {
+	 			$result->items[$i]['charging_point_vehicle_type'][$j] = "Alle kjøretøy";
+	 		} else if($result->items[$i]['charging_point_vehicle_type'][$j] == "Short vehicles") {
+	 			$result->items[$i]['charging_point_vehicle_type'][$j] = "Korte kjøretøy";
+	 		} else if($result->items[$i]['charging_point_vehicle_type'][$j] == "Plug-in hybrids") {
+	 			$result->items[$i]['charging_point_vehicle_type'][$j] = "Ladbare hybrider";
+	 		}
+	 		if($result->items[$i]['charging_point_accessibility'][$j] == "Open") {
+	 			$result->items[$i]['charging_point_accessibility'][$j] = "Åpent";
+	 		} else if($result->items[$i]['charging_point_accessibility'][$j] == "Standard key") {
+	 			$result->items[$i]['charging_point_accessibility'][$j] = "Standardnøkkel";
+	 		} else if($result->items[$i]['charging_point_accessibility'][$j] == "Other") {
+	 			$result->items[$i]['charging_point_accessibility'][$j] = "Annet";
+	 		} else if($result->items[$i]['charging_point_accessibility'][$j] == "Payment") {
+	 			$result->items[$i]['charging_point_accessibility'][$j] = "Betaling";
+	 		} else if($result->items[$i]['charging_point_accessibility'][$j] == "Cellular phone") {
+	 			$result->items[$i]['charging_point_accessibility'][$j] = "Mobiltelefon";
+	 		}
+
+	 		if($result->items[$i]['charging_point_charging_capacity'][$j] == "Unspecified") {
+	 			$result->items[$i]['charging_point_charging_capacity'][$j] = "Uspesifisert";
+	 		} 
+
+	 		if($result->items[$i]['charging_point_fixed_cable'][$j] == "Yes") {
+	 			$result->items[$i]['charging_point_fixed_cable'][$j] = "Ja";
+	 		} else if($result->items[$i]['charging_point_fixed_cable'][$j] == "No") {
+	 			$result->items[$i]['charging_point_fixed_cable'][$j] = "Nei";
+	 		}
+
+	 		if($result->items[$i]['charging_point_reservable'][$j] == "Yes") {
+	 			$result->items[$i]['charging_point_reservable'][$j] = "Ja";
+	 		} else if($result->items[$i]['charging_point_reservable'][$j] == "No") {
+	 			$result->items[$i]['charging_point_reservable'][$j] = "Nei";
+	 		}
+
+	 		
+
+	 		if($result->items[$i]['charging_point_payment_method'][$j] == "Cellular phone") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Mobiltelefon";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "VISA and Mastercard"){
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "VISA og Mastercard";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Mastercard and VISA") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Mastercard og VISA";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Other cards") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Andre bankkort";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Subscription") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Abonnement";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Coin machine") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Parkeringsautomat";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Miscellaneous cards") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Ulike bankkort";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Miscellaneous") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Diverse";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "Cellular phone and Charging card") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "Mobiltelefon og ladekort";
+	 		} else if($result->items[$i]['charging_point_payment_method'][$j] == "VISA, Mastercard and Charging card") {
+	 			$result->items[$i]['charging_point_payment_method'][$j] = "VISA, Mastercard og ladekort";
+	 		}
+
+	 		dpm ($result->items[$i]['charging_point_connector'][$j], "HELLO!");
+	 	}
+
+
+	 	if($result->items[$i]['availability'] == "Public") {
+	 		$result->items[$i]['availability'] = "Offentlig";
+	 		dpm ("Offentlig");
+
+	 	} else if ($result->items[$i]['availability'] == "Visitors") {
+	 		$result->items[$i]['availability'] = "Besøkende";
+	 		dpm("Besøkende");
+	 	} else if ($result->items[$i]['availability'] == "By appointment") {
+	 		$result->items[$i]['availability'] = "Etter avtale";
+	 		dpm("Etter avtale");
+	 	} else if ($result->items[$i]['availability'] == "Employees") {
+	 		$result->items[$i]['availability'] = "Ansatte";
+	 		dpm("Ansatte");
+	 	} else if($result->items[$i]['availability'] == "Residents") {
+	 		$result->items[$i]['availability'] = "Beboere";
+	 	}
+
+	 	if($result->items[$i]['24hrs'] == "No") {
+	 		$result->items[$i]['24hrs'] = "Nei";
+	 	} else if($result->items[$i]['24hrs'] == "Yes") {
+	 		$result->items[$i]['24hrs'] = "Ja";
+	 	}
+
+	 	if($result->items[$i]['realtime_information'] == "No") {
+	 		$result->items[$i]['realtime_information'] = "Nei";
+	 	} else if($result->items[$i]['realtime_information'] == "Yes") {
+	 		$result->items[$i]['realtime_information'] = "Ja";
+	 	}
+	 	
+	 	if($result->items[$i]['parking_fee'] == "No") {
+	 		$result->items[$i]['parking_fee'] = "Nei";
+	 	} else if($result->items[$i]['parking_fee'] == "Yes") {
+	 		$result->items[$i]['parking_fee'] = "Ja";
+	 	}
+
+	 	if($result->items[$i]['time_limit'] == "No") {
+	 		$result->items[$i]['time_limit'] = "Nei";
+	 	} else if($result->items[$i]['time_limit'] == "Yes") {
+	 		$result->items[$i]['time_limit'] = "Ja";
+	 	}
+
+	 	if($result->items[$i]['location'] == "Shopping center") {
+	 		$result->items[$i]['location'] = "Kjøpesenter";
+	 	} else if($result->items[$i]['location'] == "Airport") {
+	 		$result->items[$i]['location'] = "Flyplass";
+	 	} else if($result->items[$i]['location'] == "Street") {
+	 		$result->items[$i]['location'] = "Gateparkering";
+	 	} else if($result->items[$i]['location'] == "Car park") {
+	 		$result->items[$i]['location'] = "Parkeringshus";
+	 	} else if($result->items[$i]['location'] == "Transport hub") {
+	 		$result->items[$i]['location'] = "Transportknutepunkt";
+	 	} else if($result->items[$i]['location'] == "Hotel U+0026 restaurants" || $result->items[$i]['location'] == "Hotel &amp; restaurants") {
+	 		$result->items[$i]['location'] = "Hotell og serveringssted";
+	 	} else if($result->items[$i]['location'] == "Gas station") {
+	 		$result->items[$i]['location'] = "Bensinstasjon";
+	 	} 
+
+	 	if($result->items[$i]['public_funding'] == "Other") {
+	 		$result->items[$i]['public_funding'] = "Annet";
+	 	} else if ($result->items[$i]['public_funding'] == "None") {
+	 		$result->items[$i]['public_funding'] = "Ingen";
+	 	} else if ($result->items[$i]['public_funding'] == "Climate step") {
+	 		$result->items[$i]['public_funding'] = "Klimasteget";
+	 	}
+
+	 	dpm($cid, "New charging station id");
+
+	 }
+}
+
+
+
+/*hook_feeds_processor_targets_alter()
+Implement hook_feeds_processor_targets_alter() in a custom module.
+For the target you want to make unique, set optional_unique to TRUE.
+Also, for the same target, specify a callback function that looks up the node using the unique identifier in unique_callbacks.
+Implement the callback function.
+Go to the mapping settings of your Feeds importer, add the field you want to be unique and set this field as an unique target.
+See feeds.api.php for further information and examples. Look specific to the examples for hook_feeds_processor_targets_alter() and for my_module_mapper_unique.*/
+// Sets charging station id as a unique identifier for feeds importer. 
+function ecar_custom_feeds_processor_targets_alter(&$targets, $entity_type, $bundle){
+//dpm($bundle, "entity type");
+	if($entity_type =='node' && $bundle== 'ladestasjoner'){
+		//dpm($targets, "targets");
+		if(isset($targets['field_charging_station_id'])){
+			//Set unique to true
+			$targets['field_charging_station_id']['optional_unique'] = TRUE;
+			//Callback function which looks up the node using the unique identifier. 
+			$targets['field_charging_station_id']['unique_callbacks'][] = 'ecar_custom_mapper_callback';
+			
+		}
+	}
+	//dpm($targets['field_charging_station_id'], "field charging station id");
+}
+
+function ecar_custom_mapper_callback(FeedsSource $source, $entity_type, $bundle, $target, array $values){
+  list($field_name, $column) = explode(':', $target . ':value');
+  // Example for if the target is a field.
+  $query = new EntityFieldQuery();
+  $result = $query
+    ->entityCondition('entity_type', $entity_type)
+    ->entityCondition('bundle', $bundle)
+    ->fieldCondition($field_name, $column, $values)
+    ->execute();
+
+  if (!empty($result[$entity_type])) {
+  	dpm($result[$entity_type], "mapper callback: Return");
+    return key($result[$entity_type]);
+  }	
+
+
+}
+
+function ecar_custom_feeds_presave(Feedssource $source, $entity, $item){
+	dpm("Ecar custom feeds presave()");
+	dpm($source, "Source");
+	dpm($entity, "Entity");
+	dpm($item, "Item");
+
+	dpm($item['charging_station_id'],"item[charging station ID]");
+
+	//Number charging points
+	$ncs = $item['number_charging_points'];
+	dpm($ncs, "Saves number of charging_points");
+
+	//Case 1: No entity references has been connected to this node. Create new nodes
+	//Case 2: Check if number of charging points is different. Ie we have one new or one less
+	//Load node field db query without loading the entire node. http://drupal.stackexchange.com/questions/30904/retrieve-a-field-value-without-loading-the-entire-node 
+	//Case 3: We already have the correct number of charging points, now update the new fields. 
+
+	//Station and points are new.
+	dpm($entity->is_new, "Entity is new? ");
+	if($entity->is_new){
+		//$entity
+		//$entity->guid = $item['charging_station_id'];
+		//dpm($entity, "Setting GUID");
+
+		dpm($entity, "Creating a new entity, charging station did not exist");
+		dpm($item['lat_long_position'], "Fixes lat and long position");
+		$pos = trim($item['lat_long_position'], '()');
+		$pos = explode(",", $pos);			
+		$lon = $pos[0];
+		$lat = $pos[1];
+		dpm($lat.$lon, "Lat and long is now splitted and trimmed.");
+		$geofield = array(
+			'geom' => 'POINT ('.$lat.' '.$lon.')',
+			'geo_type' => 'point',
+			'lat' => $lat . "000000",
+			'lon' => $lon . "000000",
+			'left' => $lon . "000000",
+			'top' => $lat . "000000",
+			'right' => $lon . "000000",
+			'bottom' => $lat . "000000",
+			);
+		$entity->field_position[LANGUAGE_NONE][0] = $geofield;
+		dpm($entity->field_position[LANGUAGE_NONE][0], "Saved geofield array in entity field position");
+
+		for($temp=1; $temp<$ncs+1; $temp++){
+			$charging_point_id = $item['charging_station_id'] . $temp;
+			$new_node_id = new_charging_point_node($charging_point_id, $item, $temp);
+			dpm($new_node_id, "Saving new charging point id with new node id:");
+			$entity->field_ladepunkter[LANGUAGE_NONE][] = array(
+				'target_id' => $new_node_id,
+				'target_type' => 'node',
+		);		
+	  }
+	} else{
+		dpm($entity->field_ladepunkter[LANGUAGE_NONE], "Entity already exists.");
+
+		if(sizeof($entity->field_ladepunkter[LANGUAGE_NONE])!=$ncs){
+			dpm(sizeof($entity->field_ladepunkter[LANGUAGE_NONE]), "Error: Number of charging stations increased or decreased!!! No action was taken.");
+			dpm($ncs, "Should be");
+		} else{
+			$i = 0;
+			dpm("Update existing charging points");
+			foreach ($entity->field_ladepunkter[LANGUAGE_NONE] as $charging_point) {
+				dpm($charging_point['target_id'], "Updates charging point with target id:");
+				update_charging_point_fields($charging_point['target_id'], $item, $i);
+				$i++;			
+			}			
+		}
+	}
+}
+
+function new_charging_point_node($charging_point_id, $item, $nr){
+	$node = new stdClass();
+	$node->type = 'ladepunkt';
+	$nr += 1;
+	$title = $item['name']. ": Ladepunkt ". $nr; //Gives: Ladestasjonsnavn: Ladepunkt 1
+	dpm($title, "New node created with title");
+	$node->title = $title;
+	$node->language = LANGUAGE_NONE;
+	$node->uid = 2;  //owner of the node -> 2 gives E-Charge
+	$nr = $nr -1;
+
+	$node->field_cpid[LANGUAGE_NONE][0]['value'] = $charging_point_id;	
+	$node->field_accessibility[LANGUAGE_NONE][0]['value'] = $item['charging_point_accessibility'][$nr];
+	//$node->field_availability[LANGUAGE_NONE][0]['value'] = $item['charging_point_availability'][$nr];
+	$node->field_connector[LANGUAGE_NONE][0]['value'] = $item['charging_point_connector'][$nr];
+	$node->field_charging_capacity[LANGUAGE_NONE][0]['value'] = $item['charging_point_charging_capacity'][$nr];
+	$node->field_vehicle_type[LANGUAGE_NONE][0]['value'] = $item['charging_point_vehicle_type'][$nr];
+	$node->field_reservable[LANGUAGE_NONE][0]['value'] = $item['charging_point_reservable'][$nr];
+	$node->field_payment_method[LANGUAGE_NONE][0]['value'] = $item['charging_point_payment_method'][$nr];
+	$node->field_charge_mode[LANGUAGE_NONE][0]['value'] = $item['charging_point_charge_mode'][$nr];
+	$node->field_fixed_cable[LANGUAGE_NONE][0]['value'] = $item['charging_point_fixed_cable'][$nr];	
+
+	dpm($node, "New node created with field insert");
+	
+	$node = node_submit($node);
+	node_save($node);
+
+	return $node->nid;
+}
+function update_charging_point_fields($nid, $item, $nr){
+	
+	$node = node_load($nid);
+
+
+    dpm($node, "NODE:");
+
+	$nr += 1;
+	if(strcmp($node->title, $item['name']. ": Ladepunkt ". $nr)!=0){
+		$node->title = $item['name']. ": Ladepunkt ". $nr;
+	}
+
+	if(strcmp($node->field_accessibility[LANGUAGE_NONE][0]['value'], $item['charging_point_accessibility'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_accessibility[LANGUAGE_NONE][0]['value'] = $item['charging_point_accessibility'][$nr];
+	}
+	if(strcmp($node->field_connector[LANGUAGE_NONE][0]['value'], $item['charging_point_connector'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_connector[LANGUAGE_NONE][0]['value'] = $item['charging_point_connector'][$nr];
+	}
+	if(strcmp($node->field_charging_capacity[LANGUAGE_NONE][0]['value'], $item['charging_point_charging_capacity'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_charging_capacity[LANGUAGE_NONE][0]['value'] = $item['charging_point_charging_capacity'][$nr];
+	}
+	if(strcmp($node->field_vehicle_type[LANGUAGE_NONE][0]['value'], $item['charging_point_vehicle_type'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_vehicle_type[LANGUAGE_NONE][0]['value'] = $item['charging_point_vehicle_type'][$nr];
+	}
+	if(strcmp($node->field_reservable[LANGUAGE_NONE][0]['value'], $item['charging_point_reservable'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_reservable[LANGUAGE_NONE][0]['value'] = $item['charging_point_reservable'][$nr];
+	}
+	if(strcmp($node->field_payment_method[LANGUAGE_NONE][0]['value'], $item['charging_point_payment_method'][$nr])!=0){
+		$node->field_payment_method[LANGUAGE_NONE][0]['value'] = $item['charging_point_payment_method'][$nr];
+	}
+	if(strcmp($node->field_charge_mode[LANGUAGE_NONE][0]['value'], $item['charging_point_charge_mode'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_charge_mode[LANGUAGE_NONE][0]['value'] = $item['charging_point_charge_mode'][$nr];
+	}
+	if(strcmp($node->field_fixed_cable[LANGUAGE_NONE][0]['value'], $item['charging_point_fixed_cable'][$nr])!=0){
+		dpm($nr, "New field for this charging point number updated.");
+		$node->field_fixed_cable[LANGUAGE_NONE][0]['value'] = $item['charging_point_fixed_cable'][$nr];
+	}
+
+	dpm($node, "Node updated:");
+	node_save($node);	
+}
+
+
+
+function ecar_custom_node_view ($node, $view_mode, $lancode){
+//dpm($node, "node");
+
+}
+
+
+///https://www.drupal.org/node/622700 -- feeds importer guide for developers
+
+
+
+/* foreach ($result->items as $result_item => $value) {
+	 	$cid = $result_item['charging_station_id'];
+	 	if(strlen($cid)<5){
+			$missing = 5 - strlen($cid);
+			for($missing; $missing>0; $missing--){
+				$cid = "0" . $cid; 
+				dpm($cid, "Result");
+			}
+			dpm(strlen($cid),"less than five");
+		}
+		//$result_item['charging_station_id'] = $cid;
+		$value = $cid;
+	 }*/
+
+
+	// dpm($result, "Result after change");
+	//Charging point id
+	/*dpm($result->items[0]['charging_station_id'], "charging station id");
+	$cid = $result->items[0]['charging_station_id'];
+	//Add 'zeroes' so we get 5 digits
+	if(strlen($cid)<5){
+		$missing = 5 - strlen($cid);
+		for($missing; $missing>0; $missing--){
+			$cid = "0" . $cid; 
+			dpm($cid, "Result");
+		}
+		dpm(strlen($cid),"less than five");
+	}
+	//Save charging station id
+	$result->items[0]['charging_station_id'] = $cid;*/
